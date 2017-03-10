@@ -1,5 +1,4 @@
 # Creating training and validation splits for the satellite data.
-# Thanks to visoft, n01z3, Sergey Mushinskiy, Konstantin Lopuhin for the great scripts and discussions.
 
 import matplotlib
 matplotlib.use("Pdf")
@@ -18,9 +17,9 @@ GS = pd.read_csv('grid_sizes.csv', names=['ImageId', 'Xmax', 'Ymin'], skiprows=1
 SB = pd.read_csv('sample_submission.csv')
 CROP_SIZE = 160
 
-def M(image_id, dims=11, size=1600):
+def M(image_id, dims=20, size=1600):
     """
-    TODO
+    Loads the tiff-files with different number of bands.
     """
     if dims==3:
         filename = "kaggle.com/c/dstl-satellite-imagery-feature-detection/download/three_band/{}.tif".format(
@@ -85,6 +84,9 @@ def init_logging(filename, message="START"):
     return logger
 
 def _convert_coordinates_to_raster(coords, img_size, xymax):
+    """
+    Resize the polygon coordinates to the specific resolution of an image.
+    """
     Xmax, Ymax = xymax
     H, W = img_size
     W1 = 1.0 * W * W / (W + 1)
@@ -117,7 +119,7 @@ def _get_polygon_list(wkt_list_pandas, imageId, class_type):
 
 def _get_and_convert_contours(polygonList, raster_img_size, xymax):
     """
-    TODO
+    Create lists of exterior and interior coordinates of polygons resized to a specific image resolution.
     """
     perim_list = []
     interior_list = []
@@ -135,6 +137,9 @@ def _get_and_convert_contours(polygonList, raster_img_size, xymax):
     return perim_list, interior_list
 
 def _plot_mask_from_contours(raster_img_size, contours, class_value=1):
+    """
+    Creates a class mask (0 and 1s) from lists of exterior and interior polygon coordinates.
+    """
     img_mask = np.zeros(raster_img_size, np.uint8)
     if contours is None:
         return img_mask
@@ -144,6 +149,9 @@ def _plot_mask_from_contours(raster_img_size, contours, class_value=1):
     return img_mask
 
 def generate_mask_for_image_and_class(raster_size, imageId, class_type, grid_sizes_panda=GS, wkt_list_pandas=DF):
+    """
+    Outputs a specific class mask from the training images.
+    """
     xymax = _get_xmax_ymin(grid_sizes_panda, imageId)
     polygon_list = _get_polygon_list(wkt_list_pandas, imageId, class_type)
     contours = _get_and_convert_contours(polygon_list, raster_size, xymax)
@@ -179,7 +187,8 @@ def show_image(im, ms, number, name=""):
                 plt.title("{} Mask".format(classes[counter]), size=22)
                 counter += 1
     plt.grid("off")
-    plt.savefig("Crops/Crop_{}_{}.png".format(number, name), bbox_inches="tight", pad_inches=1)
+    os.makedirs("../plots", exists_ok=True)
+    plt.savefig("../plots/Crop_{}_{}.png".format(number, name), bbox_inches="tight", pad_inches=1)
     plt.clf()
     plt.cla()
     plt.close()
@@ -290,12 +299,8 @@ def create_train_and_eval_splits(logger, output=False, name="", denominator=1, a
                                          :int(np.floor(m.shape[0] / 2)), :int(np.floor(m.shape[1] / 2))]
             x_crops, y_crops = get_crops(img, mask, how_many=specific_oversampling_dict[id][0], output=output,
                                          aug=aug)
-            # pdb.set_trace()
             x = np.concatenate((x, x_crops))
             y = np.concatenate((y, y_crops))
-            # pdb.set_trace()
-            # print(x.shape)
-            # print(y.shape)
         # upper right quarter of picture
         if 1 in train_quarter_dict[id]:
             img = m[:int(np.floor(m.shape[0] / 2)), int(np.floor(m.shape[1] / 2)):]
@@ -307,8 +312,6 @@ def create_train_and_eval_splits(logger, output=False, name="", denominator=1, a
                                          aug=aug)
             x = np.concatenate((x, x_crops))
             y = np.concatenate((y, y_crops))
-            # print(x.shape)
-            # print(y.shape)
         # lower left quarter of picture
         if 2 in train_quarter_dict[id]:
             img = m[int(np.floor(m.shape[0] / 2)):, :int(np.floor(m.shape[1] / 2))]
@@ -320,8 +323,6 @@ def create_train_and_eval_splits(logger, output=False, name="", denominator=1, a
                                          aug=aug)
             x = np.concatenate((x, x_crops))
             y = np.concatenate((y, y_crops))
-            # print(x.shape)
-            # print(y.shape)
         # lower right quarter of picture
         if 3 in train_quarter_dict[id]:
             img = m[int(np.floor(m.shape[0] / 2)):, int(np.floor(m.shape[1] / 2)):]
@@ -333,12 +334,11 @@ def create_train_and_eval_splits(logger, output=False, name="", denominator=1, a
                                          aug=aug)
             x = np.concatenate((x, x_crops))
             y = np.concatenate((y, y_crops))
-        # pdb.set_trace()
         print(x.shape)
         print(y.shape)
     os.makedirs("data", exists_ok=True)
-    np.save('data/x_trn_all_{}_{}bands'.format(name, dims), x)
-    np.save('data/y_trn_all_{}_{}bands'.format(name, dims), y)
+    np.save('../data/x_trn_all_{}_{}bands'.format(name, dims), x)
+    np.save('../data/y_trn_all_{}_{}bands'.format(name, dims), y)
 
     print("{} BANDS".format(dims))
     for z in range(10):
@@ -444,5 +444,5 @@ def create_train_and_eval_splits(logger, output=False, name="", denominator=1, a
     for z in range(10):
         print("{:.4f}% Class {} in eval set".format(100*y[:,z].sum()/(y.shape[0]*160*160), class_list[z]))
         logger.info("{:.4f}% Class {} in eval set".format(100*y[:,z].sum()/(y.shape[0]*160*160), class_list[z]))
-    np.save('data/x_eval_all_{}_{}bands'.format(name, dims), x)
-    np.save('data/y_eval_all_{}_{}bands'.format(name, dims), y)
+    np.save('../data/x_eval_all_{}_{}bands'.format(name, dims), x)
+    np.save('../data/y_eval_all_{}_{}bands'.format(name, dims), y)
