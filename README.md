@@ -5,4 +5,10 @@ The goal was to find ten potentially overlapping features (buildings, other stru
 crops, rivers, lakes, trucks, cars) in satellite images. This solution uses the [U-Net](https://arxiv.org/abs/1505.04597) neural network
 architecture to segment the images for ten binary classes.
 
+## Example input image
+![Raw training image](Raw-6120_2_2.png?raw=true "One training image in RGB")
+
+## Example output feature detection
+![Binary segmentations](Image-6120_2_2.png?raw=true "Ten binary segmentations for all classes")
+
 #### Thanks to visoft, n01z3, Sergey Mushinskiy, Konstantin Lopuhin for the great scripts and discussions.
