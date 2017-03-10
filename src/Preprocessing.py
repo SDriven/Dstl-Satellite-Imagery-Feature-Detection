@@ -3,6 +3,7 @@
 import matplotlib
 matplotlib.use("Pdf")
 import matplotlib.pyplot as plt
+from datetime import datetime
 import numpy as np
 import random
 import tifffile as tiff
@@ -12,9 +13,9 @@ from shapely.wkt import loads
 import cv2
 import pandas as pd
 
-DF = pd.read_csv('train_wkt_v4.csv')
-GS = pd.read_csv('grid_sizes.csv', names=['ImageId', 'Xmax', 'Ymin'], skiprows=1)
-SB = pd.read_csv('sample_submission.csv')
+DF = pd.read_csv('data/train_wkt_v4.csv')
+GS = pd.read_csv('data/grid_sizes.csv', names=['ImageId', 'Xmax', 'Ymin'], skiprows=1)
+SB = pd.read_csv('data/sample_submission.csv')
 CROP_SIZE = 160
 
 def M(image_id, dims=20, size=1600):
@@ -22,32 +23,32 @@ def M(image_id, dims=20, size=1600):
     Loads the tiff-files with different number of bands.
     """
     if dims==3:
-        filename = "kaggle.com/c/dstl-satellite-imagery-feature-detection/download/three_band/{}.tif".format(
+        filename = "data/three_band/{}.tif".format(
             image_id)
         img = tiff.imread(filename)
         img = np.rollaxis(img, 0, 3)
         img = cv2.resize(img, (size, size))
         return img
     elif dims==8:
-        filename = "www.kaggle.com/c/dstl-satellite-imagery-feature-detection/download/sixteen_band/{}_M.tif".format(
+        filename = "data/sixteen_band/{}_M.tif".format(
             image_id)
         img = tiff.imread(filename)
         img = np.rollaxis(img, 0, 3)
         img = cv2.resize(img, (size, size))
     elif dims==20:
-        img_M = np.transpose(tiff.imread("www.kaggle.com/c/dstl-satellite-imagery-feature-detection/download/sixteen_band/{}_M.tif".format(
+        img_M = np.transpose(tiff.imread("data/sixteen_band/{}_M.tif".format(
                 image_id)), (1,2,0))
         img_M = cv2.resize(img_M, (size, size))
 
-        img_A = np.transpose(tiff.imread("www.kaggle.com/c/dstl-satellite-imagery-feature-detection/download/sixteen_band/{}_A.tif".format(
+        img_A = np.transpose(tiff.imread("data/sixteen_band/{}_A.tif".format(
             image_id)), (1,2,0))
         img_A = cv2.resize(img_A, (size, size))
 
-        img_P = tiff.imread("www.kaggle.com/c/dstl-satellite-imagery-feature-detection/download/sixteen_band/{}_P.tif".format(
+        img_P = tiff.imread("data/sixteen_band/{}_P.tif".format(
             image_id))
         img_P = cv2.resize(img_P, (size, size))
 
-        filename = "kaggle.com/c/dstl-satellite-imagery-feature-detection/download/three_band/{}.tif".format(
+        filename = "data/three_band/{}.tif".format(
             image_id)
         img_RGB = tiff.imread(filename)
         img_RGB = np.rollaxis(img_RGB, 0, 3)
@@ -228,7 +229,7 @@ def get_crops(img, msk, how_many=10, aug=True, output=False):
     print(x.shape, y.shape, np.amax(x), np.amin(x), np.amax(y), np.amin(y))
     return x, y
 
-def create_train_and_eval_splits(logger, output=False, name="", denominator=1, aug=True, size=1600, dims=3):
+def create_train_and_eval_splits(logger, output=False, name="", denominator=1, aug=True, size=1600, dims=20):
     """
     We take the 25 train images, split each of them into 4 quarter images and use a representative sample of these
     for evaluation. Different kinds of images get oversampled to simulate the test distribution of images.
@@ -446,3 +447,10 @@ def create_train_and_eval_splits(logger, output=False, name="", denominator=1, a
         logger.info("{:.4f}% Class {} in eval set".format(100*y[:,z].sum()/(y.shape[0]*160*160), class_list[z]))
     np.save('../data/x_eval_all_{}_{}bands'.format(name, dims), x)
     np.save('../data/y_eval_all_{}_{}bands'.format(name, dims), y)
+
+if __name__ == "__main__":
+    os.makedirs("../logs", exist_ok=True)
+    logger = init_logging("../logs/{}.log".format(datetime.now().strftme("%d-%m-%y")),
+                          "START: Creating train/valid splits")
+    create_train_and_eval_splits(logger, output=False, name="1600_denom.5", denominator=.5, aug=False, size=1600,
+                                 dims=20)
