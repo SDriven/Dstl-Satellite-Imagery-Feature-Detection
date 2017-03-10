@@ -1,4 +1,4 @@
-# Dstl-Satellite-Imagery-Feature-Detection (Team Datenschmiede)
+# Dstl-Satellite-Imagery-Feature-Detection
 Place 18 (Public LB) solution for the [Dstl feature detection kaggle challenge](https://www.kaggle.com/c/dstl-satellite-imagery-feature-detection)
 
 The goal was to find ten potentially overlapping features (buildings, other structures, roads, tracks, trees,
