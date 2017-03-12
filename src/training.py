@@ -196,7 +196,7 @@ def calc_jacc(model, logger, dims, visual_name, img, msk, use_sample_weights, N_
         # Liste der besten Thresholds
         trs.append(best_thresh)
     avg_score = sum(ind_scores) / 10.0
-    np.save("data/thresholds_unet_{}_{:.4f}".format(visual_name, avg_score), trs)
+    np.save("../data/thresholds_unet_{}_{:.4f}".format(visual_name, avg_score), trs)
     print("Average Jaccard: {:.4f}".format(avg_score))
     logger.info("Average Jaccard: {:.4f}".format(avg_score))
     return avg_score, trs, ind_scores
@@ -308,8 +308,8 @@ def train_net(logger, dims=20, deep=True, conv_channel=32, init="glorot_uniform"
         x_val = x_val[200:]
         y_val = y_val[200:]
     else:
-        x_trn = np.load('data/x_trn_{}.npy'.format(input_name))
-        y_trn = np.load('data/y_trn_{}.npy'.format(input_name))
+        x_trn = np.load('../data/x_trn_{}.npy'.format(input_name))
+        y_trn = np.load('../data/y_trn_{}.npy'.format(input_name))
         x_trn, y_trn = unison_shuffled_copies(x_trn, y_trn)
         for z in range(N_Cls):
             print("{:.4f}% Class {} in training set".format(100*y_trn[:,z].sum()/(y_trn.shape[0]*160*160),
@@ -356,7 +356,7 @@ def train_net(logger, dims=20, deep=True, conv_channel=32, init="glorot_uniform"
     x_val = min_max_normalize(x_val, mins, maxs)
     # Center to zero mean and save means for later use
     means = x_trn.mean(axis=(0,2,3))
-    np.save("../data/means_all_{}".format(visual_name), means)
+    np.save("../data/means_{}".format(visual_name), means)
     for k in range(dims):
         x_trn[:,k] -= means[k]
         x_val[:,k] -= means[k]
