@@ -13,7 +13,7 @@ import os
 from keras.models import Model
 from keras.layers import Input, merge, Convolution2D, MaxPooling2D, UpSampling2D, Reshape, Activation, Permute
 from keras.layers.normalization import BatchNormalization
-from keras.optimizers import Adam
+from keras.optimizers import Adam, RMSprop
 from keras.callbacks import ModelCheckpoint, Callback
 import keras.backend as K
 K.set_image_dim_ordering("th")
@@ -39,7 +39,7 @@ def stretch_8bit(bands, lower_percent=2, higher_percent=98):
     return out.astype(np.uint8)
 
 def get_unet(lr=1e-4, deep=True, dims=20, conv_channel=32, N_Cls=10, bn=False, use_sample_weights=True,
-             init="glorot_uniform", jaccard_loss=False):
+             init="glorot_uniform", use_jaccard_loss=False):
     """
     Creates the U-Net in Keras
     """
@@ -143,19 +143,20 @@ def get_unet(lr=1e-4, deep=True, dims=20, conv_channel=32, N_Cls=10, bn=False, u
         outmap = Permute((2,1))(outmap)
 
     model = Model(input=inputs, output=outmap)
-
+    # optimizer = RMSprop(lr=0.045, rho=0.9, epsilon=1e-8)
+    optimizer = Adam(lr=lr)
     if use_sample_weights:
-        if jaccard_loss:
-            model.compile(optimizer=Adam(lr=lr), loss=jaccard_coef, metrics=['accuracy'],
+        if use_jaccard_loss:
+            model.compile(optimizer=optimizer, loss=jaccard_loss, metrics=['accuracy', jaccard_coef],
                           sample_weight_mode="temporal")
         else:
-            model.compile(optimizer=Adam(lr=lr), loss='binary_crossentropy', metrics=['accuracy'],
+            model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy', jaccard_coef],
                           sample_weight_mode="temporal")
     else:
-        if jaccard_loss:
-            model.compile(optimizer=Adam(lr=lr), loss='binary_crossentropy', metrics=['accuracy'])
+        if use_jaccard_loss:
+            model.compile(optimizer=optimizer, loss=jaccard_loss, metrics=['accuracy', jaccard_coef])
         else:
-            model.compile(optimizer=Adam(lr=lr), loss=jaccard_coef, metrics=['accuracy'])
+            model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy', jaccard_coef])
     return model
 
 def calc_jacc(model, logger, dims, visual_name, img, msk, use_sample_weights, N_Cls=10):
@@ -277,16 +278,21 @@ def jaccard_coef(y_true, y_pred):
     y_true_f = K.flatten(y_true)
     y_pred_f = K.flatten(y_pred)
     intersection = K.sum(y_true_f * y_pred_f)
-    return -(intersection + 1.0) / (K.sum(y_true_f) + K.sum(y_pred_f) - intersection + 1.0)
+    return (intersection + 1.0) / (K.sum(y_true_f) + K.sum(y_pred_f) - intersection + 1.0)
+
+def jaccard_loss(y_true, y_pred):
+    return -jaccard_coef(y_true, y_pred)
 
 def train_net(logger, dims=20, deep=True, conv_channel=32, init="glorot_uniform", fast=False, num_iterations=20,
               visual_name="", lr_start=1e-3, LR_decay=0.95, size=1600, input_name="new_eval", N_Cls=10,
-              bn=True, batch_size=32, input=None, use_sample_weights=False, mins=None, maxs=None, jaccard_loss=False):
+              bn=True, batch_size=32, input=None, use_sample_weights=False, mins=None, maxs=None,
+              use_jaccard_loss=False):
     """
     Trains a U-Net simultaneously for all ten classes.
     """
     print("start train net")
-    model = get_unet(lr=lr_start, deep=deep, dims=dims, conv_channel=conv_channel, bn=bn, jaccard_loss=jaccard_loss,
+    model = get_unet(lr=lr_start, deep=deep, dims=dims, conv_channel=conv_channel, bn=bn,
+                     use_jaccard_loss=use_jaccard_loss,
                      use_sample_weights=use_sample_weights, init=init, N_Cls=N_Cls)
     if input is not None:
         model.load_weights('weights/{}'.format(input))
@@ -454,8 +460,8 @@ if __name__ == "__main__":
             16050.0, 16255.0, 16008.0, 15933.0, 15805.0, 15878.0, 15746.0]
 
     model, avg_score, trs, avg_scores = train_net(
-        logger=logger, deep=False, conv_channel=16, dims=20, fast=False, num_iterations=40, bn=False,
-        visual_name="conv32_nobn_nodo_bs16_decay.97", lr_start=1e-3, LR_decay=0.97,
-        input_name="1600_denom1_20bands", batch_size=16, size=1600, use_sample_weights=True,
-        mins=mins, maxs=maxs, init="glorot_uniform")
+        logger=logger, deep=True, conv_channel=32, dims=20, fast=False, num_iterations=40, bn=False,
+        visual_name="conv32_nobn_nodo_bs16_decay.97", lr_start=1e-5, LR_decay=0.97,
+        input_name="1600_denom1_20bands", batch_size=16, size=1600, use_sample_weights=False,
+        mins=mins, maxs=maxs, init="glorot_uniform", use_jaccard_loss=False)
 
