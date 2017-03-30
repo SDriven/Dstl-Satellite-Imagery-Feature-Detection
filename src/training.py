@@ -7,6 +7,7 @@ import time
 from Preprocessing import M, init_logging
 from datetime import datetime
 import numpy as np
+import pdb
 import os
 # os.environ['THEANO_FLAGS'] = 'mode=FAST_RUN,device=cpu,floatX=float32'
 from keras.models import Model
@@ -38,7 +39,7 @@ def stretch_8bit(bands, lower_percent=2, higher_percent=98):
     return out.astype(np.uint8)
 
 def get_unet(lr=1e-4, deep=True, dims=20, conv_channel=32, N_Cls=10, bn=False, use_sample_weights=True,
-             init="glorot_uniform"):
+             init="glorot_uniform", jaccard_loss=False):
     """
     Creates the U-Net in Keras
     """
@@ -144,10 +145,17 @@ def get_unet(lr=1e-4, deep=True, dims=20, conv_channel=32, N_Cls=10, bn=False, u
     model = Model(input=inputs, output=outmap)
 
     if use_sample_weights:
-        model.compile(optimizer=Adam(lr=lr), loss='binary_crossentropy', metrics=['accuracy'],
-                      sample_weight_mode="temporal")
+        if jaccard_loss:
+            model.compile(optimizer=Adam(lr=lr), loss=jaccard_coef, metrics=['accuracy'],
+                          sample_weight_mode="temporal")
+        else:
+            model.compile(optimizer=Adam(lr=lr), loss='binary_crossentropy', metrics=['accuracy'],
+                          sample_weight_mode="temporal")
     else:
-        model.compile(optimizer=Adam(lr=lr), loss='binary_crossentropy', metrics=['accuracy'])
+        if jaccard_loss:
+            model.compile(optimizer=Adam(lr=lr), loss='binary_crossentropy', metrics=['accuracy'])
+        else:
+            model.compile(optimizer=Adam(lr=lr), loss=jaccard_coef, metrics=['accuracy'])
     return model
 
 def calc_jacc(model, logger, dims, visual_name, img, msk, use_sample_weights, N_Cls=10):
@@ -165,6 +173,8 @@ def calc_jacc(model, logger, dims, visual_name, img, msk, use_sample_weights, N_
         msk = np.rollaxis(msk, 2, 1)
         msk = msk.reshape(msk.shape[0], N_Cls, 160, 160)
     print(prd.shape, msk.shape)
+    print(np.sum(prd))
+    print(np.max(prd), np.min(prd), np.mean(prd))
 
     def compute_jaccard(threshold, t_prd, t_msk):
         pred_binary_ys = t_prd >= threshold
@@ -182,7 +192,7 @@ def calc_jacc(model, logger, dims, visual_name, img, msk, use_sample_weights, N_
         t_prd = t_prd.flatten()
 
         best_jac, best_thresh = 0, 0
-        for k in [.01, .02, .03, .04, .05, .075, .1, .125, .15, .175, .2, .225, .25, .275, .3, .325, .35, .375, .4, .45,
+        for k in [0, .01, .02, .03, .04, .05, .075, .1, .125, .15, .175, .2, .225, .25, .275, .3, .325, .35, .375, .4, .45,
               .5, .55, .6, .65, .7, .75, .8, .85, .9, .95]:
             tr = k
             jk = compute_jaccard(tr, t_prd, t_msk)
@@ -205,13 +215,16 @@ def visualize_training(loss_train, loss_eval, name, acc_train, acc_eval):
     """
     Visualizes training with log_loss, loss and accuracy plot over training and evaluation sets.
     """
+    loss_train = np.abs(loss_train)
+    loss_eval = np.abs(loss_eval)
     plt.semilogy(loss_train, basey=2)
     plt.semilogy(loss_eval, basey=2, c="red")
     plt.title('{} model loss'.format(name))
     plt.ylabel('loss')
     plt.xlabel('batch')
     plt.legend(['train', 'eval'], loc='upper left')
-    plt.savefig("model_selection/log_loss_{}.png".format(name), bbox_inches="tight", pad_inches=1)
+    os.makedirs("../plots", exist_ok=True)
+    plt.savefig("../plots/log_loss_{}.png".format(name), bbox_inches="tight", pad_inches=1)
     plt.clf()
     plt.cla()
     plt.close()
@@ -222,7 +235,7 @@ def visualize_training(loss_train, loss_eval, name, acc_train, acc_eval):
     plt.ylabel('loss')
     plt.xlabel('batch')
     plt.legend(['train', 'eval'], loc='upper left')
-    plt.savefig("model_selection/loss_{}.png".format(name), bbox_inches="tight", pad_inches=1)
+    plt.savefig("../plots/loss_{}.png".format(name), bbox_inches="tight", pad_inches=1)
     plt.clf()
     plt.cla()
     plt.close()
@@ -260,14 +273,20 @@ def visualize_scores(avg_scores, ind_scores_over_time, trs, name):
     plt.cla()
     plt.close()
 
+def jaccard_coef(y_true, y_pred):
+    y_true_f = K.flatten(y_true)
+    y_pred_f = K.flatten(y_pred)
+    intersection = K.sum(y_true_f * y_pred_f)
+    return -(intersection + 1.0) / (K.sum(y_true_f) + K.sum(y_pred_f) - intersection + 1.0)
+
 def train_net(logger, dims=20, deep=True, conv_channel=32, init="glorot_uniform", fast=False, num_iterations=20,
               visual_name="", lr_start=1e-3, LR_decay=0.95, size=1600, input_name="new_eval", N_Cls=10,
-              bn=True, batch_size=32, input=None, use_sample_weights=False, mins=None, maxs=None):
+              bn=True, batch_size=32, input=None, use_sample_weights=False, mins=None, maxs=None, jaccard_loss=False):
     """
     Trains a U-Net simultaneously for all ten classes.
     """
     print("start train net")
-    model = get_unet(lr=lr_start, deep=deep, dims=dims, conv_channel=conv_channel, bn=bn,
+    model = get_unet(lr=lr_start, deep=deep, dims=dims, conv_channel=conv_channel, bn=bn, jaccard_loss=jaccard_loss,
                      use_sample_weights=use_sample_weights, init=init, N_Cls=N_Cls)
     if input is not None:
         model.load_weights('weights/{}'.format(input))
@@ -305,8 +324,8 @@ def train_net(logger, dims=20, deep=True, conv_channel=32, init="glorot_uniform"
         x_val, y_val = unison_shuffled_copies(x_val, y_val)
         x_trn = x_val[:200]
         y_trn = y_val[:200]
-        x_val = x_val[200:]
-        y_val = y_val[200:]
+        x_val = x_val[200:300]
+        y_val = y_val[200:300]
     else:
         x_trn = np.load('../data/x_trn_{}.npy'.format(input_name))
         y_trn = np.load('../data/y_trn_{}.npy'.format(input_name))
@@ -406,10 +425,7 @@ def train_net(logger, dims=20, deep=True, conv_channel=32, init="glorot_uniform"
         acc_train = np.concatenate([acc_train, np.stack([j for j in history.accs])])
         for metric in ["acc", "loss", "val_acc", "val_loss"]:
             logger.info("{}: {}".format(metric, model.history.history[metric]))
-        if fast:
-            batches = len(np.stack([j for j in history.losses]))
-        else:
-            batches = len(np.stack([j for j in history.losses]))
+        batches = len(np.stack([j for j in history.losses]))
         for l in range(batches):
             loss_eval = np.append(loss_eval, model.history.history["val_loss"])
             acc_eval = np.append(acc_eval, model.history.history["val_acc"])
@@ -429,7 +445,7 @@ def train_net(logger, dims=20, deep=True, conv_channel=32, init="glorot_uniform"
     return model, avg_score, trs, avg_scores
 
 if __name__ == "__main__":
-    logger = init_logging("../logs/{}.log".format(datetime.now().strftme("%d-%m-%y")),
+    logger = init_logging("../logs/{}.log".format(datetime.now().strftime("%d-%m-%y")),
                           "START: Training")
     # precomputed minimum and maximum values for all spectral bands
     mins = [55.0, 167.0, 99.0, 174.0, 182.0, 144.0, 158.0, 132.0, 61.0, 138.0, 160.0, 113.0, 672.0, 490.0, 435.0,
@@ -438,8 +454,8 @@ if __name__ == "__main__":
             16050.0, 16255.0, 16008.0, 15933.0, 15805.0, 15878.0, 15746.0]
 
     model, avg_score, trs, avg_scores = train_net(
-        logger=logger, deep=True, conv_channel=32, dims=20, fast=False, num_iterations=40, bn=False,
+        logger=logger, deep=False, conv_channel=16, dims=20, fast=False, num_iterations=40, bn=False,
         visual_name="conv32_nobn_nodo_bs16_decay.97", lr_start=1e-3, LR_decay=0.97,
-        input_name="all_1600_denom.5_20bands", batch_size=16, size=1600, use_sample_weights=True,
+        input_name="1600_denom1_20bands", batch_size=16, size=1600, use_sample_weights=True,
         mins=mins, maxs=maxs, init="glorot_uniform")
 

@@ -8,6 +8,7 @@ import numpy as np
 import random
 import tifffile as tiff
 import os
+import pdb
 import logging
 from shapely.wkt import loads
 import cv2
@@ -36,20 +37,21 @@ def M(image_id, dims=20, size=1600):
         img = np.rollaxis(img, 0, 3)
         img = cv2.resize(img, (size, size))
     elif dims==20:
-        img_M = np.transpose(tiff.imread("../data/sixteen_band/{}_M.tif".format(
-                image_id)), (1,2,0))
+        # path = "../../www.kaggle.com/c/dstl-satellite-imagery-feature-detection/download/sixteen_band"
+        # img_M = np.transpose(tiff.imread(path+"/{}_M.tif".format(image_id)), (1,2,0))
+        img_M = np.transpose(tiff.imread("../data/sixteen_band/{}_M.tif".format(image_id)), (1,2,0))
         img_M = cv2.resize(img_M, (size, size))
 
-        img_A = np.transpose(tiff.imread("../data/sixteen_band/{}_A.tif".format(
-            image_id)), (1,2,0))
+        # img_A = np.transpose(tiff.imread(path + "/{}_A.tif".format(image_id)), (1, 2, 0))
+        img_A = np.transpose(tiff.imread("../data/sixteen_band/{}_A.tif".format(image_id)), (1,2,0))
         img_A = cv2.resize(img_A, (size, size))
 
-        img_P = tiff.imread("../data/sixteen_band/{}_P.tif".format(
-            image_id))
+        # img_P = tiff.imread(path+"/{}_P.tif".format(image_id))
+        img_P = tiff.imread("../data/sixteen_band/{}_P.tif".format(image_id))
         img_P = cv2.resize(img_P, (size, size))
 
-        filename = "../data/three_band/{}.tif".format(
-            image_id)
+        filename = "../data/three_band/{}.tif".format(image_id)
+        # filename = "../../kaggle.com/c/dstl-satellite-imagery-feature-detection/download/three_band/{}.tif".format(image_id)
         img_RGB = tiff.imread(filename)
         img_RGB = np.rollaxis(img_RGB, 0, 3)
         img_RGB = cv2.resize(img_RGB, (size, size))
@@ -188,7 +190,7 @@ def show_image(im, ms, number, name=""):
                 plt.title("{} Mask".format(classes[counter]), size=22)
                 counter += 1
     plt.grid("off")
-    os.makedirs("../plots", exists_ok=True)
+    os.makedirs("../plots", exist_ok=True)
     plt.savefig("../plots/Crop_{}_{}.png".format(number, name), bbox_inches="tight", pad_inches=1)
     plt.clf()
     plt.cla()
@@ -337,7 +339,7 @@ def create_train_and_eval_splits(logger, output=False, name="", denominator=1, a
             y = np.concatenate((y, y_crops))
         print(x.shape)
         print(y.shape)
-    os.makedirs("../data", exists_ok=True)
+    os.makedirs("../data", exist_ok=True)
     np.save('../data/x_trn_{}_{}bands'.format(name, dims), x)
     np.save('../data/y_trn_{}_{}bands'.format(name, dims), y)
 
@@ -450,7 +452,8 @@ def create_train_and_eval_splits(logger, output=False, name="", denominator=1, a
 
 if __name__ == "__main__":
     os.makedirs("../logs", exist_ok=True)
-    logger = init_logging("../logs/{}.log".format(datetime.now().strftme("%d-%m-%y")),
+    # pdb.set_trace()
+    logger = init_logging("../logs/{}.log".format(datetime.now().strftime("%d-%m-%y")),
                           "START: Creating train/valid splits")
-    create_train_and_eval_splits(logger, output=False, name="1600_denom.5", denominator=.5, aug=False, size=1600,
+    create_train_and_eval_splits(logger, output=False, name="1600_denom1", denominator=1, aug=False, size=1600,
                                  dims=20)
